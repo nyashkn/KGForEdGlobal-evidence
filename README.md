@@ -1,0 +1,38 @@
+# KGForEdGlobal evidence
+
+This repository holds the evidence for the `kn/*` branches on two forks of IDinsight's curriculum knowledge-graph code: [`nyashkn/KGForEdGlobal`](https://github.com/nyashkn/KGForEdGlobal) (the pipeline) and [`nyashkn/KGForEdGlobalMCP`](https://github.com/nyashkn/KGForEdGlobalMCP) (the MCP server). For each branch it says what the change does, what was measured, how many cases, and where the result stops being reliable, and it ships the scripts to re-run the checks. The branches are small and independent (`kn/integration` is their merge); each is one commit on IDinsight `main` at `9d87cdb` (pipeline) or `45f07c4` (MCP), as of 2026-11-25.
+
+| Branch | Type | What it changes | Headline validated number | Evidence kind | Limit | Evidence |
+|---|---|---|---|---|---|---|
+| [`kn/haiku-5-5-adaptive-thinking`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/haiku-5-5-adaptive-thinking) | feat | Adds `claude-haiku-5-5` to the adaptive-thinking model list and allows `anthropic_effort="max"` | 1 unit test on the settings; no other validation | unit test | The test checks the settings, not a call to the API | tests in the branch |
+| [`kn/create-kgs-stop-after`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/create-kgs-stop-after) | feat | `KGFEG_STOP_AFTER=as\|lc` ends `create_kgs` after the AS or LC export; `as` raises if the AS validation report failed | 2 test functions, 5 cases (stop after `as` and `lc`; a failed AS report raises) | unit tests | No full live run; unset means the whole run | tests in the branch |
+| [`kn/sfi-identity-key-collision`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/sfi-identity-key-collision) | fix | Dedup merges SFI groups that would mint one final identity key, instead of stopping with "Final SFI UUID collisions detected" | n=11 Rwanda runs, checker verdicts flipped: `main` crashes 11/11, branch mints 11/11 (4 to 5 forced merges); recorded responses give identical output | replay; trigger simulated | No natural public crash: the trigger is simulated | [evidence](evidence/sfi-identity-key-collision.md) |
+| [`kn/sfi-anchor-line-breaks`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/sfi-anchor-line-breaks) | fix, opt-in | `KGFEG_SFI_JOIN_LINE_BREAKS=1`: after a strict miss, match a source anchor whose PDF line breaks were re-wrapped | 3/3 re-wrapped anchors that `main` misses now match; 0 span changes over 2,340 anchors that already matched (true by construction) | replay; 3 cases | Only 3 cases seen; not shown to rescue a full run; a dropped-space miss is not fixed | [evidence](evidence/sfi-anchor-line-breaks.md) |
+| [`kn/sibling-position-export`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/sibling-position-export) | feat, opt-in | `kgs.as.emit_sibling_position` writes sibling order as `position` in the Learning Commons export | Rwanda P1, n=184 items: all 184 have `position`; setting off is byte-identical; sibling order agrees with PyMuPDF text order for the 170 items whose text is unique (all parent groups, 3 runs). Not checked: the 14 items with repeated text (7 are attitudes objectives). PyMuPDF text is also a hint to the page IR model, so this is not an independent check | replay; 3 runs | One country. The `statementCode` claim did not hold: the exporter already writes it | [evidence](evidence/sibling-position-export.md) |
+| [`kn/page-router`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/page-router) | feat, opt-in | A model-free router that skips pages with no standards, plus a stand-alone `route_pages` entry | 6 public PDFs: 100% of gold pages kept; 0.0% to 12.2% of pages flagged, but the single page range the pipeline reads shrinks by only 0.0% to 5.4%; no model calls | deterministic run; defaults tuned on 3/6 | Not wired into the pipeline; the Nigeria row tests nothing (every page is a gold page) | [evidence](evidence/page-router.md) |
+| [`kn/integration`](https://github.com/nyashkn/KGForEdGlobal/tree/kn/integration) | merge | Merges the six branches above | lint 6/6; 3757 tests in the default selection pass (743 deselected by markers) | test run | Test run only; no live pipeline run | none |
+| [`kn/lexical-plural-folding`](https://github.com/nyashkn/KGForEdGlobalMCP/tree/kn/lexical-plural-folding) (MCP) | feat, opt-in | Profile setting `languagePolicy.foldLexicalPlurals` folds plurals in lexical search; off equals `main` | Pooled n=165 questions, top 5 within grade: 52 to 57 (keyword query), 39 to 45 (raw) | probe, not re-runnable | Weak: the gain is 1 to 4 questions per cell; the probe cannot be re-run from here | [evidence](evidence/lexical-plural-folding.md) |
+
+## How to reproduce
+
+The replays read the saved outputs of pipeline runs. Those outputs contain curriculum text, so they are not in this repository; you produce them.
+
+1. **Source trees.** Clone the forks and make one tree per code state you want to compare, for example `git worktree add ../main-tree 9d87cdb` (IDinsight `main`) and `git worktree add ../branch-tree kn/sfi-anchor-line-breaks`. Set up the backend virtualenv as in IDinsight's `docs/development/local-setup.md`. Every script that imports the package takes `--src PATH/backend/src` and fills in the fake settings the package checks on import (`backend/tests/test.env` holds equivalent fake values).
+2. **Runs.** Run IDinsight's pipeline (`extract_page_ir`, `verify_page_ir_continuity`, `stitch_document_ir`, `create_kgs`) on `examples/rwanda/config_math_curriculum_p1_p3.json`, with `start_page` 25 and `end_page` 56 (the P1 slice) of the 2025 REB mathematics PDF (sha256 `7b9629e6bd5ad5566e6420892908a307687543ede8cc0c676ddf5b0321ba5874`). Use any model. A run folder needs `results/<id>/stitching/document_ir.json` and `results/<id>/kgs/`, and its logs. The checks in this repository used 12 such runs (nine P1 slices, two P2 slices, one on the 2022 edition); your runs will give different counts, and the claims to compare are the pattern, such as "`main` crashes and the branch mints" under `flip`.
+3. **Page router inputs.** The six curriculum PDFs and package folders are listed in [evidence/page-router.md](evidence/page-router.md). The packages are in IDinsight's `KGForEdGlobalMCP` repository under `data/graph_packages`.
+4. **Scripts** (run each with the virtualenv's `python -I`):
+
+| Script | Branch it checks |
+|---|---|
+| [`scripts/replay_identity_key.py`](scripts/replay_identity_key.py) | `kn/sfi-identity-key-collision` (`--scenario recorded` or `flip`) |
+| [`scripts/scan_run_logs.py`](scripts/scan_run_logs.py) | counts anchor misses and UUID collisions in logs (anchor and identity-key branches) |
+| [`scripts/replay_anchor_misses.py`](scripts/replay_anchor_misses.py) | `kn/sfi-anchor-line-breaks` (set `KGFEG_SFI_JOIN_LINE_BREAKS=1` for the fix) |
+| [`scripts/compare_anchor_flag.py`](scripts/compare_anchor_flag.py) | `kn/sfi-anchor-line-breaks`, no-regression count |
+| [`scripts/check_position.py`](scripts/check_position.py) | `kn/sibling-position-export` |
+| [`scripts/score_page_router.py`](scripts/score_page_router.py) | `kn/page-router` |
+
+Each script's docstring lists its inputs. For the two tests-only branches and `kn/integration`, check out the branch and run `pytest` in `backend/` with the values from `tests/test.env`. For the MCP branch, run `backend/tests/kgfegmcp/test_lexical_plural_fold.py`.
+
+## What this is not
+
+This is not a pull request and not a request for review. It makes no claim beyond the numbers in each evidence file, which come from small samples, and each file lists what was not shown. The pipeline and MCP code are IDinsight's under the MIT licence; this repository is MIT too (see `LICENSE`).
